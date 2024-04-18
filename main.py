@@ -85,20 +85,20 @@ def viterbi_algorithm(sentence, emission_matrix, transition_matrix):
     return list(zip(words, best_path))
 
 def main():
-    language= input("Enter the language: ")
-    training_data= input("Enter the path of the training data: ")
-    if not os.path.exists(training_data):
-        if language=="english":
-            print("File not found, Downloading the training data...")
-            os.system("wget https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/master/en_ewt-ud-train.conllu")
-            training_data= "en_ewt-ud-train.conllu"
+    # language= input("Enter the language: ")
+    # training_data= input("Enter the path of the training data: ")
+    # if not os.path.exists(training_data):
+    #     if language=="english":
+    #         print("File not found, Downloading the training data...")
+    #         os.system("wget https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/master/en_ewt-ud-train.conllu")
+    #         training_data= "en_ewt-ud-train.conllu"
         
-    tagged_training_data= read_data(training_data)
-    emission_matrix= emission_probabilities_table(tagged_training_data)
-    transition_matrix= transition_probabilities_table(tagged_training_data)
-    testing_data= input("Enter a sentence to be tagged: ")
+    # tagged_training_data= read_data(training_data)
+    # emission_matrix= emission_probabilities_table(tagged_training_data)
+    # transition_matrix= transition_probabilities_table(tagged_training_data)
+    # testing_data= input("Enter a sentence to be tagged: ")
 
-    predicted_tags= viterbi_algorithm(testing_data, emission_matrix, transition_matrix)
+    # predicted_tags= viterbi_algorithm(testing_data, emission_matrix, transition_matrix)
 
 
 if __name__ == "__main__":
