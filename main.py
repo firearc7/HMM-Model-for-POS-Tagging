@@ -1,105 +1,93 @@
-import re
 import os
-import numpy as np
-import pandas as pd
-from sklearn.metrics import precision_score, recall_score, f1_score
-
-def read_data(training_data):
-    with open(training_data, "r", encoding='utf8') as file:
-        tagged_data= file.read().split("\n")
-    temp= []
-    tt= tagged_data
-    tagged_data= []
-    for i in tt:
-        if i=="":
-            temp.insert(0, ["<s>", "<s>"])
-            temp.append(["</s>", "</s>"])
-            tagged_data.append(temp)
-            temp= []
-        else:
-            temp.append(i.split("\t"))
-    return tagged_data
-
-def emission_probabilities_table(tagged_training_data):
-    emission_probabilities= {}
-    for sentence in tagged_training_data:
-        for word in sentence:
-            if word[1] not in emission_probabilities:
-                emission_probabilities[word[1]]= {}
-            if word[0] not in emission_probabilities[word[1]]:
-                emission_probabilities[word[1]][word[0]]= 1
-            else:
-                emission_probabilities[word[1]][word[0]]+= 1
-    for tag in emission_probabilities:
-        total= sum(emission_probabilities[tag].values())
-        for word in emission_probabilities[tag]:
-            emission_probabilities[tag][word]/= total
-    return emission_probabilities
-
-def transition_probabilities_table(tagged_training_data):
-    transition_probabilities= {}
-    for sentence in tagged_training_data:
-        for i in range(len(sentence)-1):
-            if sentence[i][1] not in transition_probabilities:
-                transition_probabilities[sentence[i][1]]= {}
-            if sentence[i+1][1] not in transition_probabilities[sentence[i][1]]:
-                transition_probabilities[sentence[i][1]][sentence[i+1][1]]= 1
-            else:
-                transition_probabilities[sentence[i][1]][sentence[i+1][1]]+= 1
-    for tag in transition_probabilities:
-        total= sum(transition_probabilities[tag].values())
-        for next_tag in transition_probabilities[tag]:
-            transition_probabilities[tag][next_tag]/= total
-    tags= list(transition_probabilities.keys())
-    tags.append("</s>")
-    for tag in tags:
-        if tag not in transition_probabilities:
-            transition_probabilities[tag]= {}
-            for next_tag in tags:
-                transition_probabilities[tag][next_tag]= 0
-    for tag in transition_probabilities:
-        for next_tag in tags:
-            if next_tag not in transition_probabilities[tag]:
-                transition_probabilities[tag][next_tag]= 0
-    return transition_probabilities
-
-def viterbi_algorithm(sentence, emission_matrix, transition_matrix):
-    words= sentence.split()
-    states= list(emission_matrix.keys())
-    viterbi= {state: [0 for _ in words] for state in states}
-    backpointer= {state: [None for _ in words] for state in states}
-    for state in states:
-        if words[0] in emission_matrix[state]:
-            viterbi[state][0]= transition_matrix['<s>'].get(state, 0) * emission_matrix[state][words[0]]
-        else:
-            viterbi[state][0]= transition_matrix['<s>'].get(state, 0) * 1e-10
-    for t in range(1, len(words)):
-        for state in states:
-            max_prob, prev_st= max((viterbi[prev_state][t-1] * transition_matrix[prev_state].get(state, 0), prev_state) for prev_state in states)
-            viterbi[state][t]= max_prob * emission_matrix[state].get(words[t], 1e-10)
-            backpointer[state][t]= prev_st
-    max_prob, best_last_state= max((viterbi[state][-1], state) for state in states)
-    best_path= [best_last_state]
-    for t in range(len(words)-1, 0, -1):
-        best_path.insert(0, backpointer[best_path[0]][t])
-    return list(zip(words, best_path))
+import time
+from data_analysis import *
+from algorithms import *
+from testing import *
 
 def main():
-    # language= input("Enter the language: ")
-    # training_data= input("Enter the path of the training data: ")
-    # if not os.path.exists(training_data):
-    #     if language=="english":
-    #         print("File not found, Downloading the training data...")
-    #         os.system("wget https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/master/en_ewt-ud-train.conllu")
-    #         training_data= "en_ewt-ud-train.conllu"
-        
-    # tagged_training_data= read_data(training_data)
-    # emission_matrix= emission_probabilities_table(tagged_training_data)
-    # transition_matrix= transition_probabilities_table(tagged_training_data)
-    # testing_data= input("Enter a sentence to be tagged: ")
-
-    # predicted_tags= viterbi_algorithm(testing_data, emission_matrix, transition_matrix)
-
+    language= input("Enter the language: ")
+    language= language.lower()
+    training_data= input("Enter the data: ")
+    if not os.path.exists(training_data):
+        if language=="english":
+            print("File not found, Downloading the training data from the web...")
+            read_file_from_web("https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/master/en_ewt-ud-train.conllu", "Dataset/english.txt")
+            training_data= "Dataset/english.txt"
+        elif language=="hindi":
+            print("File not found, Downloading the training data from the web...")
+            read_file_from_web("https://raw.githubusercontent.com/UniversalDependencies/UD_Hindi-HDTB/master/hi_hdtb-ud-train.conllu", "Dataset/hindi.txt")
+            training_data= "Dataset/hindi.txt"
+        elif language=="spanish":
+            print("File not found, Downloading the training data from the web...")
+            read_file_from_web("https://raw.githubusercontent.com/UniversalDependencies/UD_Spanish-GSD/master/es_gsd-ud-train.conllu", "Dataset/spanish.txt")
+            training_data= "Dataset/spanish.txt"
+        elif language=="sanskrit":
+            print("File not found, Downloading the training data from the web...")
+            read_file_from_web("https://raw.githubusercontent.com/UniversalDependencies/UD_Sanskrit-Vedic/master/sa_vedic-ud-train.conllu", "Dataset/sanskrit.txt")
+            training_data= "Dataset/sanskrit.txt"
+        else:
+            print("File not found, no pre-existing dataset for this language, cannot train the model. Exiting...")
+            exit()
+    print("Reading the training data...")
+    tagged_training_data= read_data(training_data)
+    tagged_testing_data= tagged_training_data[:int(0.1*len(tagged_training_data))]
+    tagged_training_data= tagged_training_data[int(0.1*len(tagged_training_data)):]
+    print("Training the model...")
+    emission_matrix= emission_probabilities_table(tagged_training_data)
+    transition_matrix= transition_probabilities_table(tagged_training_data)
+    print("Training Completed!")
+    print("Testing Viterbi Algorithm...")
+    start_time= time.time()
+    actual_viterbi, predicted_viterbi= test_viterbi(tagged_testing_data, emission_matrix, transition_matrix)
+    precision_viterbi, recall_viterbi, f1_viterbi, c_viterbi= evaluation(actual_viterbi, predicted_viterbi)
+    filename="Results/"+language+"/viterbi_results.txt"
+    with open(filename, "w") as f:
+        f.write("Precision: "+str(precision_viterbi)+"\n")
+        f.write("Recall: "+str(recall_viterbi)+"\n")
+        f.write("F1 Score: "+str(f1_viterbi)+"\n")
+        f.write("Confusion Matrix:\n"+str(c_viterbi)+"\n")
+    end_time= time.time()
+    print("Viterbi Results saved in Results folder!")
+    print("Time taken for Viterbi Algorithm: ", end_time-start_time, " seconds")
+    print("Testing Beam Search Algorithm...")
+    start_time= time.time()
+    actual_beam_search, predicted_beam_search= test_beam_search(tagged_testing_data, emission_matrix, transition_matrix)
+    precision_beam_search, recall_beam_search, f1_beam_search, c_beam_search= evaluation(actual_beam_search, predicted_beam_search)
+    filename= "Results/"+language+"/beam_search_results.txt"
+    with open(filename, "w") as f:
+        f.write("Precision: "+str(precision_beam_search)+"\n")
+        f.write("Recall: "+str(recall_beam_search)+"\n")
+        f.write("F1 Score: "+str(f1_beam_search)+"\n")
+        f.write("Confusion Matrix:\n"+str(c_beam_search)+"\n")
+    end_time= time.time()
+    print("Beam Search Results saved in Results folder!")
+    print("Time taken for Beam Search Algorithm: ", end_time-start_time, " seconds")
+    print("Testing Greedy Search Algorithm...")
+    start_time= time.time()
+    actual_greedy_search, predicted_greedy_search= test_greedy_search(tagged_testing_data, emission_matrix, transition_matrix)
+    precision_greedy_search, recall_greedy_search, f1_greedy_search, c_greedy_search= evaluation(actual_greedy_search, predicted_greedy_search)
+    filename= "Results/"+language+"/greedy_search_results.txt"
+    with open(filename, "w") as f:
+        f.write("Precision: "+str(precision_greedy_search)+"\n")
+        f.write("Recall: "+str(recall_greedy_search)+"\n")
+        f.write("F1 Score: "+str(f1_greedy_search)+"\n")
+        f.write("Confusion Matrix:\n"+str(c_greedy_search)+"\n")
+    end_time= time.time()
+    print("Greedy Search Results saved in Results folder!")
+    print("Time taken for Greedy Search Algorithm: ", end_time-start_time, " seconds")
+    print("Testing Posterior Decoding Algorithm...")
+    start_time= time.time()
+    actual_posterior_decoding, predicted_posterior_decoding= test_posterior_decoding(tagged_testing_data, emission_matrix, transition_matrix)
+    precision_posterior_decoding, recall_posterior_decoding, f1_posterior_decoding, c_posterior_decoding= evaluation(actual_posterior_decoding, predicted_posterior_decoding)
+    filename= "Results/"+language+"/posterior_decoding_results.txt"
+    with open(filename, "w") as f:
+        f.write("Precision: "+str(precision_posterior_decoding)+"\n")
+        f.write("Recall: "+str(recall_posterior_decoding)+"\n")
+        f.write("F1 Score: "+str(f1_posterior_decoding)+"\n")
+        f.write("Confusion Matrix:\n"+str(c_posterior_decoding)+"\n")
+    end_time= time.time()
+    print("Posterior Decoding Results saved in Results folder!")
+    print("Time taken for Posterior Decoding Algorithm: ", end_time-start_time, " seconds")
 
 if __name__ == "__main__":
     main()
